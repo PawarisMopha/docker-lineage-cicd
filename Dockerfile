@@ -186,8 +186,7 @@ RUN mkdir -p $MIRROR_DIR $SRC_DIR $TMP_DIR $CCACHE_DIR $ZIP_DIR $LMANIFEST_DIR \
 #       zlib1g-dev \
 #       && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get clean && \
-    apt-get -qq update && \ 
+RUN apt-get -qq update && \ 
     apt-get update -o Acquire::Check-Valid-Until=false && \    
     apt-get install -y --no-install-recommends bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg \
     gperf  imagemagick protobuf-compiler python3-protobuf lib32readline-dev lib32z1-dev \
