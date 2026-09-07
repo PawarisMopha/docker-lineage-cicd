@@ -194,7 +194,7 @@ RUN apt-get clean && \
     libdw-dev libelf-dev libgnutls28-dev lz4 libsdl1.2-dev libssl-dev libxml2 libxml2-utils \
     lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev \
     python-is-python3 \
-    cron openjdk-8-jdk wget \
+    cron openjdk-17-jdk wget \
     && rm -rf /var/lib/apt/lists/*
 
 # For Ubuntu 23.10 (mantic) or newer, install libncurses5 from 23.04 (lunar)
