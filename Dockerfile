@@ -186,8 +186,10 @@ RUN mkdir -p $MIRROR_DIR $SRC_DIR $TMP_DIR $CCACHE_DIR $ZIP_DIR $LMANIFEST_DIR \
 #       zlib1g-dev \
 #       && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get -qq update && \
-    apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg \
+RUN apt-get clean && \
+    apt-get -qq update && \ 
+    apt-get update -o Acquire::Check-Valid-Until=false && \    
+    apt-get install -y --no-install-recommends bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg \
     gperf  imagemagick protobuf-compiler python3-protobuf lib32readline-dev lib32z1-dev \
     libdw-dev libelf-dev libgnutls28-dev lz4 libsdl1.2-dev libssl-dev libxml2 libxml2-utils \
     lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev \
