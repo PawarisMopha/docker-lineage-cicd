@@ -1,0 +1,107 @@
+name: Release Automation
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: tag_name
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Release version: ${VERSION}"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log --oneline --format="- %h: %s")
+          else
+            CHANGELOG=$(git log ${PREVIOUS_TAG}..HEAD --oneline --format="- %h: %s")
+          fi
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag_name.outputs.version }}
+          body: |
+            # Release ${{ steps.tag_name.outputs.version }}
+            
+            ## Changes
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## Docker Image
+            ```bash
+            docker pull lineageos4microg/docker-lineage-cicd:${{ steps.tag_name.outputs.version }}
+            ```
+            
+            ## What's New
+            - Automated release based on tag
+            - Docker image published to Docker Hub
+            - Ready for production use
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Notify release
+        run: |
+          echo "✅ Release ${{ steps.tag_name.outputs.version }} created successfully!"
+          echo "📦 Docker image: lineageos4microg/docker-lineage-cicd:${{ steps.tag_name.outputs.version }}"
+          echo "🔗 GitHub Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.tag_name.outputs.version }}"
+
+  publish-release:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Get version from tag
+        id: tag_name
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Build and push release image to Docker Hub
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            lineageos4microg/docker-lineage-cicd:${{ steps.tag_name.outputs.version }}
+            lineageos4microg/docker-lineage-cicd:latest
+          labels: |
+            org.opencontainers.image.version=${{ steps.tag_name.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
