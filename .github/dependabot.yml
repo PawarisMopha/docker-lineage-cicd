@@ -1,11 +1,55 @@
 version: 2
+
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "daily"
+  # Docker image updates
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
-      interval: "daily"
-      
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    reviewers:
+      - "PawarisMopha"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(docker):"
+    open-pull-requests-limit: 5
+    pull-request-branch-name:
+      separator: "/"
+
+  # GitHub Actions updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    reviewers:
+      - "PawarisMopha"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(actions):"
+
+  # Pip/Python dependencies (if applicable)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+    reviewers:
+      - "PawarisMopha"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore(python):"
+    allow:
+      - dependency-type: "all"
+
+security-advisories: "report"
+security-updates-only: false
