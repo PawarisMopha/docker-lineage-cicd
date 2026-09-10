@@ -1,0 +1,128 @@
+name: "Container Security Scanning"
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+  schedule:
+    - cron: '0 5 * * 2'  # Weekly on Tuesday at 5 AM UTC
+  workflow_dispatch:
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+    name: Trivy Container Scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'Trivy'
+
+  grype-scan:
+    runs-on: ubuntu-latest
+    name: Grype Vulnerability Scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Grype scanner
+        uses: anchore/scan-action@v3
+        with:
+          path: '.'
+          fail-build: false
+          severity-cutoff: high
+        id: grype
+
+      - name: Upload Grype results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+          category: 'Grype'
+        continue-on-error: true
+
+  checkov-scan:
+    runs-on: ubuntu-latest
+    name: Checkov IaC Scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Checkov scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: dockerfile
+          output_format: sarif
+          output_file_path: reports/checkov.sarif
+        continue-on-error: true
+
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: reports/checkov.sarif
+          category: 'Checkov'
+        continue-on-error: true
+
+  docker-image-scan:
+    runs-on: ubuntu-latest
+    name: Scan Built Docker Image
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: lineageos4microg/docker-lineage-cicd:scan-test
+          outputs: type=docker,dest=/tmp/image.tar
+
+      - name: Load image for scanning
+        run: docker load --input /tmp/image.tar
+
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          input: '/tmp/image.tar'
+          format: 'sarif'
+          output: 'trivy-docker-image.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Docker image scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-docker-image.sarif'
+          category: 'Trivy-Docker-Image'
+
+  dockle-scan:
+    runs-on: ubuntu-latest
+    name: Dockle Container Security Linter
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Dockle scan
+        uses: goodwithtech/dockle-action@main
+        with:
+          image: 'lineageos4microg/docker-lineage-cicd:latest'
+          exit-code: '0'
+          severity: 'WARN'
+        continue-on-error: true
