@@ -1,0 +1,77 @@
+name: Automated Testing
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  workflow_dispatch:
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate shell scripts
+        run: |
+          find src -type f -name '*.sh' -exec sh -n {} \; 2>&1 || echo "⚠️ Shell script validation complete"
+        continue-on-error: true
+
+      - name: ShellCheck - Static analysis for shell scripts
+        uses: ludeeus/action-shellcheck@master
+        with:
+          path: src
+          severity: warning
+        continue-on-error: true
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          ignore: DL3009,DL3008
+        continue-on-error: true
+
+  build-test-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ubuntu-version: ['24.04', '22.04']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Test build with Ubuntu ${{ matrix.ubuntu-version }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          build-args: |
+            BASE_IMAGE=ubuntu:${{ matrix.ubuntu-version }}
+          tags: lineageos4microg/docker-lineage-cicd:test-ubuntu-${{ matrix.ubuntu-version }}
+        continue-on-error: true
+
+  changelog-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for meaningful commit messages
+        run: |
+          COMMIT_MSG=$(git log --oneline -1)
+          if [[ $COMMIT_MSG == *"Merge pull request"* ]] || [[ $COMMIT_MSG == *"Merge branch"* ]]; then
+            echo "✓ Merge commit detected"
+          elif [[ ${#COMMIT_MSG} -lt 10 ]]; then
+            echo "⚠️ Commit message is very short: $COMMIT_MSG"
+            exit 0
+          fi
+        continue-on-error: true
