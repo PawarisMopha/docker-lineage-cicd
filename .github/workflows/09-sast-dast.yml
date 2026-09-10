@@ -1,0 +1,104 @@
+name: "SAST & DAST Security Analysis"
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+  schedule:
+    - cron: '0 6 * * 3'  # Weekly on Wednesday at 6 AM UTC
+
+jobs:
+  semgrep-scan:
+    runs-on: ubuntu-latest
+    name: Semgrep SAST Analysis
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep scan
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >
+            p/security-audit
+            p/owasp-top-ten
+            p/docker
+          generateSarif: true
+        continue-on-error: true
+
+      - name: Upload Semgrep SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: semgrep.sarif
+          category: 'Semgrep'
+        continue-on-error: true
+
+  shellcheck-scan:
+    runs-on: ubuntu-latest
+    name: ShellCheck Shell Script Analysis
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Run ShellCheck on shell scripts
+        run: |
+          find src -type f -name "*.sh" -exec shellcheck -x {} + || true
+        continue-on-error: true
+
+  python-sast:
+    runs-on: ubuntu-latest
+    name: Python SAST (Bandit & Safety)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Bandit
+        run: pip install bandit safety
+
+      - name: Run Bandit on Python files
+        run: |
+          find . -name "*.py" -type f -not -path "./.venv/*" -not -path "./venv/*" | xargs bandit -r || true
+        continue-on-error: true
+
+      - name: Run Safety check on dependencies
+        run: pip list | safety check || true
+        continue-on-error: true
+
+  hadolint-strict:
+    runs-on: ubuntu-latest
+    name: Hadolint Dockerfile Lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+        continue-on-error: true
+
+  license-check:
+    runs-on: ubuntu-latest
+    name: License Compliance Check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check licenses with REUSE
+        uses: fsfe/reuse-action@v3
+        continue-on-error: true
+
+      - name: Run license checker
+        run: |
+          pip install license-checker 2>/dev/null || true
+          license-checker || true
+        continue-on-error: true
