@@ -1,0 +1,66 @@
+name: Build and Test Docker Image
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: lineageos4microg/docker-lineage-cicd:test-build
+          outputs: type=docker,dest=/tmp/image.tar
+
+      - name: Load Docker image
+        run: |
+          docker load --input /tmp/image.tar
+
+      - name: Run Dockerfile linting (hadolint)
+        run: |
+          docker run --rm -i hadolint/hadolint < Dockerfile
+        continue-on-error: true
+
+      - name: Test Docker image structure
+        run: |
+          docker run --rm lineageos4microg/docker-lineage-cicd:test-build ls -la /root/
+        continue-on-error: true
+
+      - name: Verify essential directories
+        run: |
+          docker run --rm lineageos4microg/docker-lineage-cicd:test-build sh -c 'test -d /srv/mirror && test -d /srv/src && test -d /srv/ccache && echo "✓ All directories exist"'
+        continue-on-error: true
+
+  scan-security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
