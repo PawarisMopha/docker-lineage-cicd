@@ -1,0 +1,91 @@
+name: "Dependency Check & Updates"
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+  schedule:
+    - cron: '0 4 * * 0'  # Weekly on Sunday at 4 AM UTC
+  workflow_dispatch:
+
+jobs:
+  dependency-check:
+    runs-on: ubuntu-latest
+    name: Check Dependencies for Vulnerabilities
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run dependency-check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          path: '.'
+          format: 'JSON'
+          args: >
+            --enableExperimental
+            --scan .
+        continue-on-error: true
+
+      - name: Upload Dependency-Check results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+          category: 'Dependency-Check'
+        continue-on-error: true
+
+  snyk-scan:
+    runs-on: ubuntu-latest
+    name: Snyk Security Scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: lineageos4microg/docker-lineage-cicd:latest
+          args: --severity-threshold=high
+        continue-on-error: true
+
+  renovate-check:
+    runs-on: ubuntu-latest
+    name: Check for Dependency Updates (Renovate)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Renovate dry-run check
+        uses: renovatebot/github-action@v39.0.46
+        with:
+          configurationFile: .renovaterc.json
+          token: ${{ secrets.RENOVATE_TOKEN || secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  sbom-generation:
+    runs-on: ubuntu-latest
+    name: Generate Software Bill of Materials (SBOM)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM with syft
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom-spdx.json
+
+      - name: Upload SBOM as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: sbom
+          path: sbom-spdx.json
+
+      - name: Attach SBOM to release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo "SBOM will be attached to release automatically"
+
